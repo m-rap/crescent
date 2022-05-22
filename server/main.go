@@ -123,7 +123,7 @@ func Negotiate(c *gin.Context) {
 		d2Arr := strings.Split(params.D2, "\n")
 		if len(d2Arr) < 2 {
 			c.JSON(200, gin.H {
-				"msg": "invalid data"
+				"msg": "invalid data",
 			})
 			c.Abort()
 			return
@@ -132,12 +132,12 @@ func Negotiate(c *gin.Context) {
 		decrypter := cipher.NewCBCDecrypter(aesCipher, iv)
 		encryptedData, _ := base64.StdEncoding.DecodeString(d2Arr[1])
 		data := make([]byte, len(encryptedData))
-		decrypter.Decrypt(data, encryptedData)
+		decrypter.CryptBlocks(data, encryptedData)
 		var dataJson map[string]interface{}
 		json.Unmarshal(data, &dataJson)
 		c.Set("data", dataJson)
 		c.Set("cipher", aesCipher)
-		c.set("iv", iv)
+		c.Set("iv", iv)
 		c.Next()
 	}
 }
@@ -149,13 +149,13 @@ func Api(c *gin.Context) {
 	tmp, _ = c.Get("cipher")
 	aesCipher := tmp.(cipher.Block)
 	tmp, _ = c.Get("iv")
-	iv := tmp.(string)
+	iv := tmp.([]byte)
 	fmt.Println(data)
 
 	responseData := []byte("{data: data rahasia balasan lho}")
 	resDataEncrypted := make([]byte, len(responseData))
 	encrypter := cipher.NewCBCEncrypter(aesCipher, iv)
-	encrypter.Encrypt(resDataEncrypted, responseData)
+	encrypter.CryptBlocks(resDataEncrypted, responseData)
 	resDataEncrypted64 := base64.StdEncoding.EncodeToString(resDataEncrypted)
 
 	c.JSON(200, gin.H{
