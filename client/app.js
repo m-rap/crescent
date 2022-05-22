@@ -45,7 +45,7 @@ class App extends React.Component {
             let encryptedSymKey = forge.util.decode64(resJson.d4);
             this.state.symKey = keypair.privateKey.decrypt(encryptedSymKey, 'RSA-OAEP', {md: forge.md.sha256.create()});
 
-            console.log("decrypted symkey: " + encryptedSymKey);
+            console.log("decrypted symkey: " + this.state.symKey);
 
             this.state.negoState = 1;
         } else if (this.state.negoState == 1) {
@@ -53,9 +53,10 @@ class App extends React.Component {
 
             console.log("encrypting data before send to server");
 
-            console.log("create encryption cipher");
-            let cipher = forge.cipher.createCipher('AES-CBC', this.state.symKey);
             let iv = forge.random.getBytesSync(16);
+
+            console.log("create encryption cipher key "+this.state.symKey+" iv " + iv);
+            let cipher = forge.cipher.createCipher('AES-CBC', this.state.symKey);
 
             console.log("start cipher");
             cipher.start({iv: iv});
@@ -63,7 +64,7 @@ class App extends React.Component {
             cipher.finish();
             console.log("cipher finished");
 
-            let encryptedData = cipher.output.getBytes();
+            let encryptedData = cipher.output.bytes();
             let encryptedData64 = forge.util.encode64(encryptedData);
             let iv64 = forge.util.encode64(iv);
             let d2 = iv64+"\\n"+encryptedData64;
@@ -75,17 +76,35 @@ class App extends React.Component {
                 body: JSON.stringify({d2: d2, d5: this.state.negoState})
             }
 
+            console.log("sending to server");
+
             const res = await fetch("http://localhost:8080/api", opts);
             const resJson = await res.json();
 
-            console.log("got response " + JSON.stringify(resJson));
+            console.log("got response from server " + JSON.stringify(resJson));
 
-            let resEncryptedData = forge.util.decode64(resJson.d2);
-            let decCipher = forge.cipher.createDecipher(this.state.symKey);
+            console.log("decoding base64");
+            let tmp = forge.util.decode64(resJson.d2);
+            let resEncryptedData = forge.util.createBuffer(tmp);
+            //let resEncryptedData = forge.util.createBuffer(tmp, "raw");
+            //let resEncryptedData = forge.util.createBuffer(tmp, "utf8");
+            console.log("resEncryptedData " + JSON.stringify(resEncryptedData) + " len " + resEncryptedData.length());
+
+            console.log("creating decipher key "+this.state.symKey + " iv " + iv);
+            let decCipher = forge.cipher.createDecipher('AES-CBC', this.state.symKey);
+            console.log("start decipher");
             decCipher.start({iv: iv});
+            //decCipher.update(forge.util.createBuffer(resEncryptedData.bytes()));
             decCipher.update(resEncryptedData);
-            decCipher.finish();
-            let resData = JSON.parse(decCipher.output.getBytes().toString());
+            let resDecryptedData = decCipher.output.getBytes();
+            let result = decCipher.finish();
+            console.log("decipher finished aaa "+result);
+            //let resDecryptedData = decCipher.output;
+            //console.log("resDecryptedData "+JSON.stringify(resDecryptedData));
+            console.log("resDecryptedData "+resDecryptedData);
+            //console.log("resDecryptedStr "+resDecryptedData.toString());
+            let resData = JSON.parse(resDecryptedData);
+            //let resData = JSON.parse(resDecryptedData.getBytes());
             console.log("res from server: " + resData);
         }
         

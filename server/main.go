@@ -109,7 +109,7 @@ func Negotiate(c *gin.Context) {
 		}
 
 		id = uuid.NewString()
-		symKey := make([]byte, 32)
+		symKey := make([]byte, aes.BlockSize)
 		rand.Seed(time.Now().Unix())
 		rand.Read(symKey)
 		encryptedSymKey, _ := rsa.EncryptOAEP(sha256.New(), cRand.Reader, pubKey, symKey, nil)
@@ -160,17 +160,23 @@ func Negotiate(c *gin.Context) {
         }
 		decrypter := cipher.NewCBCDecrypter(aesCipher, iv)
 		encryptedData, _ := base64.StdEncoding.DecodeString(d2Arr[1])
-		data := make([]byte, len(encryptedData))
+        dataLen := len(encryptedData)
+		data := make([]byte, dataLen)
 		decrypter.CryptBlocks(data, encryptedData)
+        lastByte := data[dataLen - 1]
+        if !unicode.IsGraphic(rune(lastByte)) {
+            data = data[:dataLen - int(lastByte)]
+        }
         dataStr := string(data)
         fmt.Printf("clientData decrypted %v byte %v\n", dataStr, data)
-        dataStrClean := strings.Map(func(r rune) rune {
-            if unicode.IsGraphic(r) {
-                return r
-            }
-            return -1
-        }, dataStr)
-		if err = json.Unmarshal([]byte(dataStrClean), &clientData); err != nil {
+        //dataStrClean := strings.Map(func(r rune) rune {
+        //    if unicode.IsGraphic(r) {
+        //        return r
+        //    }
+        //    return -1
+        //}, dataStr)
+		//if err = json.Unmarshal([]byte(dataStrClean), &clientData); err != nil {
+		if err = json.Unmarshal(data, &clientData); err != nil {
             fmt.Printf("unmarshal failed %s\n", err.Error())
             c.Abort()
             return
@@ -196,8 +202,12 @@ func Api(c *gin.Context) {
 
     fmt.Println("inside Api func")
 
-	responseData := []byte("{\"data\": \"data rahasia balasan lho\"}")
-	resDataEncrypted := make([]byte, len(responseData))
+	responseStr := "{\"data\": \"data rahasia balasan lho\"}"
+    responseStrLen := len(responseStr)
+    remain := aes.BlockSize - responseStrLen % aes.BlockSize
+    resDataLen := responseStrLen + remain
+    resData := make([]byte, resDataLen)
+	resDataEncrypted := make([]byte, resDataLen)
 
     //aesCipher2, err := aes.NewCipher(clientInfo.SymKey)
     //if err != nil {
@@ -212,8 +222,10 @@ func Api(c *gin.Context) {
     //}
 	//encrypter := cipher.NewCBCEncrypter(aesCipher2, iv)
 	encrypter := cipher.NewCBCEncrypter(aesCipher, iv)
-	encrypter.CryptBlocks(resDataEncrypted, responseData)
+	encrypter.CryptBlocks(resDataEncrypted, resData)
 	resDataEncrypted64 := base64.StdEncoding.EncodeToString(resDataEncrypted)
+
+    fmt.Printf("resDataEncrypted %s\n", resDataEncrypted)
 
 	c.JSON(200, gin.H{
 		"d2": resDataEncrypted64,
@@ -230,31 +242,50 @@ func testSym() {
     rand.Read(iv)
 
     responseStr := "{\"data\": \"data rahasia balasan lho\"}"
-	responseData := make([]byte, aes.BlockSize)
-    copy(responseData, responseStr)
-	resDataEncrypted := make([]byte, len(responseData))
-    aesCipher, _ := aes.NewCipher(symKey)
-	encrypter := cipher.NewCBCEncrypter(aesCipher, iv)
-    encrypter.CryptBlocks(resDataEncrypted, responseData)
-    fmt.Printf("encrypted from size %d to %d\n", len(responseData), len(resDataEncrypted))
+    responseStrLen := len(responseStr)
+    //blockCount := responseStrLen / aes.BlockSize
+    //if responseStrLen % aes.BlockSize != 0 {
+    //    blockCount += 1
+    //}
+    //resDataLen := aes.BlockSize * blockCount
+    //remain := resDataLen - responseStrLen
+    remain := aes.BlockSize - responseStrLen % aes.BlockSize
+    resDataLen := responseStrLen + remain
+	resData := make([]byte, resDataLen)
+    copy(resData, responseStr)
+    fmt.Printf("pad/remain: %d\n", remain)
+    for i := responseStrLen; i < resDataLen; i++ {
+        resData[i] = byte(remain)
+    }
 
-    resDataDecrypted := make([]byte, len(responseData))
+	resDataEncrypted := make([]byte, resDataLen)
+    aesCipher, _ := aes.NewCipher(symKey)
+
+	encrypter := cipher.NewCBCEncrypter(aesCipher, iv)
+    encrypter.CryptBlocks(resDataEncrypted, resData)
+    fmt.Printf("encrypted str size %d, data size %d\n", responseStrLen, resDataLen)
+
+    resDataDecrypted := make([]byte, resDataLen)
 	decrypter := cipher.NewCBCDecrypter(aesCipher, iv)
     decrypter.CryptBlocks(resDataDecrypted, resDataEncrypted)
+    lastByte := resDataDecrypted[resDataLen - 1]
+    if !unicode.IsGraphic(rune(lastByte)) {
+        resDataDecrypted = resDataDecrypted[:resDataLen - int(lastByte)]
+    }
     fmt.Printf("decrypted: %s (%d)\n", string(resDataDecrypted), len(resDataDecrypted))
 }
 
 func main() {
-    //clientInfoMap = make(map[string]ClientInfo)
-	////encNegoGateway := gin.Default()
-	//encNegoGateway := gin.New()
-    //apiGroup := encNegoGateway.Group("/api")
-    ////apiGroup.Use(Negotiate)
-	////apiGroup.POST("/", Api)
-	//apiGroup.POST("/", Negotiate)
+    clientInfoMap = make(map[string]ClientInfo)
+	//encNegoGateway := gin.Default()
+	encNegoGateway := gin.New()
+    apiGroup := encNegoGateway.Group("/api")
+    //apiGroup.Use(Negotiate)
+	//apiGroup.POST("/", Api)
+	apiGroup.POST("/", Negotiate)
 
-	//encNegoGateway.Static("/app", "../client")
-	////encNegoGateway.Run(":8080")
+	encNegoGateway.Static("/app", "../client")
+	encNegoGateway.Run(":8080")
 
-    testSym()
+    //testSym()
 }
