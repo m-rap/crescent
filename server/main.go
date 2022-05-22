@@ -12,9 +12,10 @@ import (
 	"encoding/pem"
 	"fmt"
 	"math/rand"
-	"strconv"
+	//"strconv"
 	"strings"
 	"time"
+    "unicode"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -25,7 +26,7 @@ type EncNegoClientParams struct {
 	D2 string `json:"d2"`
 	D3 string `json:"d3"`
 	D4 string `json:"d4"`
-	D5 string `json:"d5"`
+	D5 int `json:"d5"`
 }
 
 type ClientInfo struct {
@@ -35,6 +36,10 @@ type ClientInfo struct {
 }
 
 var clientInfoMap map[string]ClientInfo
+var clientInfo ClientInfo
+var clientData map[string]interface{}
+var aesCipher cipher.Block
+var iv []byte
 
 func Home(c *gin.Context) {
 	c.String(200, "hello")
@@ -58,10 +63,13 @@ func Negotiate(c *gin.Context) {
 	}
 
 	fmt.Printf("params d5 %s\n", params.D5)
-	if params.D5 != "" {
-		state, _ = strconv.Atoi(params.D5)
+	if params.D5 >= 0 {
+		//state, _ = strconv.Atoi(params.D5)
+        state = params.D5
 		fmt.Printf("request nego state %s %d\n", params.D5, state)
 	}
+
+    fmt.Printf("nego state %d\n", state)
 
 	switch state {
 	case 0:
@@ -116,11 +124,27 @@ func Negotiate(c *gin.Context) {
 		fmt.Println("abort because still state 0")
 		c.Abort()
 
+		aClientInfo := ClientInfo{
+            Uuid: id,
+            SymKey: symKey,
+            PubKey: pubKey,
+        }
+        fmt.Printf("add client info %s to map\n", id)
+        clientInfoMap[id] = aClientInfo        
+
 	case 1:
-		clientInfo := clientInfoMap[id]
+		clientInfo = clientInfoMap[id]
 		c.BindJSON(&params)
-		aesCipher, _ := aes.NewCipher(clientInfo.SymKey)
-		d2Arr := strings.Split(params.D2, "\n")
+
+        fmt.Printf("state 1, d2: %v\n", params.D2)
+        fmt.Printf("client info %s, symkey size %d\n", clientInfo.Uuid, len(clientInfo.SymKey))
+		aesCipher, err = aes.NewCipher(clientInfo.SymKey)
+        if err != nil {
+            fmt.Printf("failed creating cipher %s\n", err.Error())
+            c.Abort()
+            return
+        }
+		d2Arr := strings.Split(params.D2, "\\n")
 		if len(d2Arr) < 2 {
 			c.JSON(200, gin.H {
 				"msg": "invalid data",
@@ -128,33 +152,63 @@ func Negotiate(c *gin.Context) {
 			c.Abort()
 			return
 		}
-		iv, _ := base64.StdEncoding.DecodeString(d2Arr[0])
+		iv, err = base64.StdEncoding.DecodeString(d2Arr[0])
+        if err != nil {
+            fmt.Printf("error decoding iv %s\n", err.Error())
+            c.Abort()
+            return
+        }
 		decrypter := cipher.NewCBCDecrypter(aesCipher, iv)
 		encryptedData, _ := base64.StdEncoding.DecodeString(d2Arr[1])
 		data := make([]byte, len(encryptedData))
 		decrypter.CryptBlocks(data, encryptedData)
-		var dataJson map[string]interface{}
-		json.Unmarshal(data, &dataJson)
-		c.Set("data", dataJson)
-		c.Set("cipher", aesCipher)
-		c.Set("iv", iv)
+        dataStr := string(data)
+        fmt.Printf("clientData decrypted %v byte %v\n", dataStr, data)
+        dataStrClean := strings.Map(func(r rune) rune {
+            if unicode.IsGraphic(r) {
+                return r
+            }
+            return -1
+        }, dataStr)
+		if err = json.Unmarshal([]byte(dataStrClean), &clientData); err != nil {
+            fmt.Printf("unmarshal failed %s\n", err.Error())
+            c.Abort()
+            return
+        }
+	    fmt.Printf("clientData unmarshalled %v\n", clientData)
+		//c.Set("data", dataJson)
+		//c.Set("cipher", aesCipher)
+		//c.Set("iv", iv)
 		c.Next()
 	}
 }
 
 func Api(c *gin.Context) {
-	var tmp interface{}
-	tmp, _ = c.Get("data")
-	data := tmp.(map[string]interface{})
-	tmp, _ = c.Get("cipher")
-	aesCipher := tmp.(cipher.Block)
-	tmp, _ = c.Get("iv")
-	iv := tmp.([]byte)
-	fmt.Println(data)
+	//var tmp interface{}
+	//tmp, _ = c.Get("data")
+	//data := tmp.(map[string]interface{})
+	//tmp, _ = c.Get("cipher")
+	//aesCipher := tmp.(cipher.Block)
+	//tmp, _ = c.Get("iv")
+	//iv := tmp.([]byte)
 
-	responseData := []byte("{data: data rahasia balasan lho}")
+    fmt.Println("inside Api func")
+
+	responseData := []byte("{\"data\": \"data rahasia balasan lho\"}")
 	resDataEncrypted := make([]byte, len(responseData))
-	encrypter := cipher.NewCBCEncrypter(aesCipher, iv)
+
+    aesCipher2, err := aes.NewCipher(clientInfo.SymKey)
+    if err != nil {
+        fmt.Printf("failed creating second cipher %s\n", err.Error())
+        c.Abort()
+        return
+    }
+    if iv == nil {
+        fmt.Printf("iv is nil")
+        c.Abort()
+        return
+    }
+	encrypter := cipher.NewCBCEncrypter(aesCipher2, iv)
 	encrypter.CryptBlocks(resDataEncrypted, responseData)
 	resDataEncrypted64 := base64.StdEncoding.EncodeToString(resDataEncrypted)
 
@@ -164,9 +218,12 @@ func Api(c *gin.Context) {
 }
 
 func main() {
-	encNegoGateway := gin.New()
+    clientInfoMap = make(map[string]ClientInfo)
+	encNegoGateway := gin.Default()
 	//encNegoGateway.GET("/", Home)
-	encNegoGateway.POST("/api", Negotiate, Api)
+    apiGroup := encNegoGateway.Group("/api")
+    apiGroup.Use(Negotiate)
+	apiGroup.POST("/", Api)
 	encNegoGateway.Static("/app", "../client")
 	encNegoGateway.Run(":8080")
 }

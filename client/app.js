@@ -49,7 +49,7 @@ class App extends React.Component {
 
             this.state.negoState = 1;
         } else if (this.state.negoState == 1) {
-            let data = "data rahasia lho";
+            let data = {data: "data rahasia lho"};
 
             console.log("encrypting data before send to server");
 
@@ -59,20 +59,23 @@ class App extends React.Component {
 
             console.log("start cipher");
             cipher.start({iv: iv});
-            cipher.update(forge.util.createBuffer(data));
+            cipher.update(forge.util.createBuffer(JSON.stringify(data)));
             cipher.finish();
             console.log("cipher finished");
 
             let encryptedData = cipher.output.getBytes();
             let encryptedData64 = forge.util.encode64(encryptedData);
+            let iv64 = forge.util.encode64(iv);
+            let d2 = iv64+"\\n"+encryptedData64;
+            console.log("iv " + iv64 + " d2 " + d2);
 
             opts = {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({d2: encryptedData64, d5: this.state.negoState})
+                body: JSON.stringify({d2: d2, d5: this.state.negoState})
             }
 
-            const res = await fetch("http://localhost:8080/Api", opts);
+            const res = await fetch("http://localhost:8080/api", opts);
             const resJson = await res.json();
 
             console.log("got response " + JSON.stringify(resJson));
