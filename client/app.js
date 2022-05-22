@@ -15,7 +15,9 @@ class App extends React.Component {
     }
 
     componentDidMount() {
-        this.callApi();
+        //this.callApi();
+
+        //this.testSym();
     }
 
     async callApi() {
@@ -45,7 +47,7 @@ class App extends React.Component {
             let encryptedSymKey = forge.util.decode64(resJson.d4);
             this.state.symKey = keypair.privateKey.decrypt(encryptedSymKey, 'RSA-OAEP', {md: forge.md.sha256.create()});
 
-            console.log("decrypted symkey: " + this.state.symKey);
+            console.log("decrypted symkey: " + this.state.symKey + " len " + this.state.symKey.length);
 
             this.state.negoState = 1;
         } else if (this.state.negoState == 1) {
@@ -91,15 +93,15 @@ class App extends React.Component {
             console.log("resEncryptedData " + JSON.stringify(resEncryptedData) + " len " + resEncryptedData.length());
 
             console.log("creating decipher key "+this.state.symKey + " iv " + iv);
-            let decCipher = forge.cipher.createDecipher('AES-CBC', this.state.symKey);
+            let decipher = forge.cipher.createDecipher('AES-CBC', this.state.symKey);
             console.log("start decipher");
-            decCipher.start({iv: iv});
-            //decCipher.update(forge.util.createBuffer(resEncryptedData.bytes()));
-            decCipher.update(resEncryptedData);
-            let resDecryptedData = decCipher.output.getBytes();
-            let result = decCipher.finish();
+            decipher.start({iv: iv});
+            //decipher.update(forge.util.createBuffer(resEncryptedData.bytes()));
+            decipher.update(resEncryptedData);
+            let resDecryptedData = decipher.output.getBytes();
+            let result = decipher.finish();
             console.log("decipher finished aaa "+result);
-            //let resDecryptedData = decCipher.output;
+            //let resDecryptedData = decipher.output;
             //console.log("resDecryptedData "+JSON.stringify(resDecryptedData));
             console.log("resDecryptedData "+resDecryptedData);
             //console.log("resDecryptedStr "+resDecryptedData.toString());
@@ -108,6 +110,43 @@ class App extends React.Component {
             console.log("res from server: " + resData);
         }
         
+    }
+
+    genSymKey() {
+        this.state.symKey = forge.random.getBytesSync(16);
+    }
+
+    testSym() {
+        let data = {data: "data rahasia lho"};
+
+        console.log("encrypting data before send to server");
+
+        let iv = forge.random.getBytesSync(16);
+        if (this.state.symKey == null) {
+            this.state.symKey = forge.random.getBytesSync(16);
+        }
+
+        console.log("create encryption cipher key "+this.state.symKey+" iv " + iv);
+        let cipher = forge.cipher.createCipher('AES-CBC', this.state.symKey);
+
+        console.log("start cipher");
+        cipher.start({iv: iv});
+        cipher.update(forge.util.createBuffer(JSON.stringify(data)));
+        cipher.finish();
+        console.log("cipher finished");
+
+        let encryptedData = cipher.output.bytes();
+
+        console.log("encryptedData " + encryptedData + " len " + encryptedData.length);
+
+        let decipher = forge.cipher.createDecipher('AES-CBC', this.state.symKey);
+        console.log("start decipher");
+        decipher.start({iv: iv});
+        //decipher.update(forge.util.createBuffer(resEncryptedData.bytes()));
+        decipher.update(forge.util.createBuffer(encryptedData));
+        let result = decipher.finish();
+        let resDecryptedData = decipher.output.getBytes();
+        console.log("decrypted: " + resDecryptedData);
     }
 
     render() {
@@ -119,6 +158,14 @@ class App extends React.Component {
                 <button onClick={() => {
                     this.callApi();
                 }}>call api</button>
+                <br/>
+                <button onClick={() => {
+                    this.testSym();
+                }}>test</button>
+                <br/>
+                <button onClick={() => {
+                    this.genSymKey();
+                }}>gen symKey</button>
             </div>
         );
 
