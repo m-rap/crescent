@@ -40,6 +40,7 @@ var clientInfo ClientInfo
 var clientData map[string]interface{}
 var aesCipher cipher.Block
 var iv []byte
+var params EncNegoClientParams
 
 func Home(c *gin.Context) {
 	c.String(200, "hello")
@@ -51,7 +52,6 @@ func Negotiate(c *gin.Context) {
 	//raw, _ := c.GetRawData()
 	//fmt.Printf("request %v\n", string(raw))
 
-	var params EncNegoClientParams
 	c.ShouldBindJSON(&params)
 
 	id, err := c.Cookie("uuid")
@@ -179,7 +179,9 @@ func Negotiate(c *gin.Context) {
 		//c.Set("data", dataJson)
 		//c.Set("cipher", aesCipher)
 		//c.Set("iv", iv)
-		c.Next()
+		//c.Next()
+
+        Api(c)
 	}
 }
 
@@ -197,18 +199,19 @@ func Api(c *gin.Context) {
 	responseData := []byte("{\"data\": \"data rahasia balasan lho\"}")
 	resDataEncrypted := make([]byte, len(responseData))
 
-    aesCipher2, err := aes.NewCipher(clientInfo.SymKey)
-    if err != nil {
-        fmt.Printf("failed creating second cipher %s\n", err.Error())
-        c.Abort()
-        return
-    }
-    if iv == nil {
-        fmt.Printf("iv is nil")
-        c.Abort()
-        return
-    }
-	encrypter := cipher.NewCBCEncrypter(aesCipher2, iv)
+    //aesCipher2, err := aes.NewCipher(clientInfo.SymKey)
+    //if err != nil {
+    //    fmt.Printf("failed creating second cipher %s\n", err.Error())
+    //    c.Abort()
+    //    return
+    //}
+    //if iv == nil {
+    //    fmt.Printf("iv is nil")
+    //    c.Abort()
+    //    return
+    //}
+	//encrypter := cipher.NewCBCEncrypter(aesCipher2, iv)
+	encrypter := cipher.NewCBCEncrypter(aesCipher, iv)
 	encrypter.CryptBlocks(resDataEncrypted, responseData)
 	resDataEncrypted64 := base64.StdEncoding.EncodeToString(resDataEncrypted)
 
@@ -217,13 +220,41 @@ func Api(c *gin.Context) {
 	})
 }
 
+func testSym() {
+	symKey := make([]byte, 32)
+	rand.Seed(time.Now().Unix())
+	rand.Read(symKey)
+
+    iv := make([]byte, aes.BlockSize)
+    rand.Seed(time.Now().Unix() + 123)
+    rand.Read(iv)
+
+    responseStr := "{\"data\": \"data rahasia balasan lho\"}"
+	responseData := make([]byte, aes.BlockSize)
+    copy(responseData, responseStr)
+	resDataEncrypted := make([]byte, len(responseData))
+    aesCipher, _ := aes.NewCipher(symKey)
+	encrypter := cipher.NewCBCEncrypter(aesCipher, iv)
+    encrypter.CryptBlocks(resDataEncrypted, responseData)
+    fmt.Printf("encrypted from size %d to %d\n", len(responseData), len(resDataEncrypted))
+
+    resDataDecrypted := make([]byte, len(responseData))
+	decrypter := cipher.NewCBCDecrypter(aesCipher, iv)
+    decrypter.CryptBlocks(resDataDecrypted, resDataEncrypted)
+    fmt.Printf("decrypted: %s (%d)\n", string(resDataDecrypted), len(resDataDecrypted))
+}
+
 func main() {
-    clientInfoMap = make(map[string]ClientInfo)
-	encNegoGateway := gin.Default()
-	//encNegoGateway.GET("/", Home)
-    apiGroup := encNegoGateway.Group("/api")
-    apiGroup.Use(Negotiate)
-	apiGroup.POST("/", Api)
-	encNegoGateway.Static("/app", "../client")
-	encNegoGateway.Run(":8080")
+    //clientInfoMap = make(map[string]ClientInfo)
+	////encNegoGateway := gin.Default()
+	//encNegoGateway := gin.New()
+    //apiGroup := encNegoGateway.Group("/api")
+    ////apiGroup.Use(Negotiate)
+	////apiGroup.POST("/", Api)
+	//apiGroup.POST("/", Negotiate)
+
+	//encNegoGateway.Static("/app", "../client")
+	////encNegoGateway.Run(":8080")
+
+    testSym()
 }
