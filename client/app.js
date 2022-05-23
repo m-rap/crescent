@@ -90,25 +90,20 @@ class App extends React.Component {
             console.log("decoding base64");
             let tmp = forge.util.decode64(resJson.d2);
             let resEncryptedData = forge.util.createBuffer(tmp);
-            //let resEncryptedData = forge.util.createBuffer(tmp, "raw");
-            //let resEncryptedData = forge.util.createBuffer(tmp, "utf8");
             console.log("resEncryptedData " + resEncryptedData.toHex() + " len " + resEncryptedData.length());
 
-            console.log("creating decipher key "+ symKeyBuff.toHex() + " iv " + ivBuff.toHex());
+            console.log("creating decipher, key "+ symKeyBuff.toHex() + " iv " + ivBuff.toHex());
+            //console.log("creating decipher, mode unpad true, key "+ symKeyBuff.toHex() + " iv " + ivBuff.toHex());
             let decipher = forge.cipher.createDecipher('AES-CBC', this.state.symKey);
+            //decipher.mode.unpad = true;
             console.log("start decipher");
             decipher.start({iv: iv});
-            //decipher.update(forge.util.createBuffer(resEncryptedData.bytes()));
             decipher.update(resEncryptedData);
             let resDecryptedData = decipher.output.getBytes();
             let result = decipher.finish();
             console.log("decipher finished aaa "+result);
-            //let resDecryptedData = decipher.output;
-            //console.log("resDecryptedData "+JSON.stringify(resDecryptedData));
             console.log("resDecryptedData "+resDecryptedData);
-            //console.log("resDecryptedStr "+resDecryptedData.toString());
             let resData = JSON.parse(resDecryptedData);
-            //let resData = JSON.parse(resDecryptedData.getBytes());
             console.log("res from server: " + resData);
         }
         
@@ -144,7 +139,6 @@ class App extends React.Component {
         let decipher = forge.cipher.createDecipher('AES-CBC', this.state.symKey);
         console.log("start decipher");
         decipher.start({iv: iv});
-        //decipher.update(forge.util.createBuffer(resEncryptedData.bytes()));
         decipher.update(forge.util.createBuffer(encryptedData));
         let result = decipher.finish();
         let resDecryptedData = decipher.output.getBytes();
