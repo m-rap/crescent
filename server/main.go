@@ -59,12 +59,10 @@ func Negotiate(c *gin.Context) {
 	if err != nil {
 		fmt.Printf("id not exists: %s:%T,%s:%T\n", id, id, err, err)
 	} else {
-		//state = 1
 	}
 
 	fmt.Printf("params d5 %s\n", params.D5)
 	if params.D5 >= 0 {
-		//state, _ = strconv.Atoi(params.D5)
         state = params.D5
 		fmt.Printf("request nego state %s %d\n", params.D5, state)
 	}
@@ -80,19 +78,6 @@ func Negotiate(c *gin.Context) {
 			return
 		}
 
-		//pubKeyDER, _ := base64.StdEncoding.DecodeString(params.D1)
-		//pubKeyInterface, err := x509.ParsePKIXPublicKey(pubKeyDER)
-		//if err != nil {
-		//	fmt.Printf("error parse public key: %s\n", err.Error())
-		//	c.Abort()
-		//	return
-		//}
-		//pubKey, ok := pubKeyInterface.(*rsa.PublicKey)
-		//if !ok {
-		//	fmt.Printf("can't cast pubkey\n")
-		//}
-
-		//pubKeyPem, _ := base64.StdEncoding.DecodeString(params.D1)
 		pubKeyPemBlock, _ := pem.Decode([]byte(params.D1))
 		if pubKeyPemBlock == nil {
 			fmt.Printf("can't find pem block.\n")
@@ -137,7 +122,7 @@ func Negotiate(c *gin.Context) {
 		c.BindJSON(&params)
 
         fmt.Printf("state 1, d2: %v\n", params.D2)
-        fmt.Printf("client info %s, symkey size %d\n", clientInfo.Uuid, len(clientInfo.SymKey))
+        fmt.Printf("client info %s, symkey %x\n", clientInfo.Uuid, clientInfo.SymKey)
 		aesCipher, err = aes.NewCipher(clientInfo.SymKey)
         if err != nil {
             fmt.Printf("failed creating cipher %s\n", err.Error())
@@ -158,6 +143,7 @@ func Negotiate(c *gin.Context) {
             c.Abort()
             return
         }
+        fmt.Printf("iv %x\n", iv)
 		decrypter := cipher.NewCBCDecrypter(aesCipher, iv)
 		encryptedData, _ := base64.StdEncoding.DecodeString(d2Arr[1])
         dataLen := len(encryptedData)
@@ -169,13 +155,6 @@ func Negotiate(c *gin.Context) {
         }
         dataStr := string(data)
         fmt.Printf("clientData decrypted %v byte %v\n", dataStr, data)
-        //dataStrClean := strings.Map(func(r rune) rune {
-        //    if unicode.IsGraphic(r) {
-        //        return r
-        //    }
-        //    return -1
-        //}, dataStr)
-		//if err = json.Unmarshal([]byte(dataStrClean), &clientData); err != nil {
 		if err = json.Unmarshal(data, &clientData); err != nil {
             fmt.Printf("unmarshal failed %s\n", err.Error())
             c.Abort()
@@ -209,23 +188,25 @@ func Api(c *gin.Context) {
     resData := make([]byte, resDataLen)
 	resDataEncrypted := make([]byte, resDataLen)
 
-    //aesCipher2, err := aes.NewCipher(clientInfo.SymKey)
-    //if err != nil {
-    //    fmt.Printf("failed creating second cipher %s\n", err.Error())
-    //    c.Abort()
-    //    return
-    //}
-    //if iv == nil {
-    //    fmt.Printf("iv is nil")
-    //    c.Abort()
-    //    return
-    //}
-	//encrypter := cipher.NewCBCEncrypter(aesCipher2, iv)
+    copy(resData, responseStr)
+    fmt.Printf("pad/remain: %d\n", remain)
+    for i := responseStrLen; i < resDataLen; i++ {
+        resData[i] = byte(remain)
+    }
+
+    fmt.Printf("create encrypter. symkey %x\niv %x\n", clientInfo.SymKey, iv)
 	encrypter := cipher.NewCBCEncrypter(aesCipher, iv)
 	encrypter.CryptBlocks(resDataEncrypted, resData)
 	resDataEncrypted64 := base64.StdEncoding.EncodeToString(resDataEncrypted)
 
-    fmt.Printf("resDataEncrypted %s\n", resDataEncrypted)
+    fmt.Printf("resDataEncrypted %x len %d\n", resDataEncrypted, resDataLen)
+
+    //fmt.Printf("create decrypter. symkey %x\niv %x\n", clientInfo.SymKey, iv)
+    //decrypted := make([]byte, resDataLen)
+	//decrypter := cipher.NewCBCDecrypter(aesCipher, iv)
+    //decrypter.CryptBlocks(decrypted, resDataEncrypted)
+
+    //fmt.Printf("decrypted: %s\n%x\n", decrypted, decrypted)
 
 	c.JSON(200, gin.H{
 		"d2": resDataEncrypted64,
@@ -243,12 +224,6 @@ func testSym() {
 
     responseStr := "{\"data\": \"data rahasia balasan lho\"}"
     responseStrLen := len(responseStr)
-    //blockCount := responseStrLen / aes.BlockSize
-    //if responseStrLen % aes.BlockSize != 0 {
-    //    blockCount += 1
-    //}
-    //resDataLen := aes.BlockSize * blockCount
-    //remain := resDataLen - responseStrLen
     remain := aes.BlockSize - responseStrLen % aes.BlockSize
     resDataLen := responseStrLen + remain
 	resData := make([]byte, resDataLen)

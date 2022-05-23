@@ -57,7 +57,9 @@ class App extends React.Component {
 
             let iv = forge.random.getBytesSync(16);
 
-            console.log("create encryption cipher key "+this.state.symKey+" iv " + iv);
+            let symKeyBuff = forge.util.createBuffer(this.state.symKey);
+            let ivBuff = forge.util.createBuffer(iv);
+            console.log("create encryption cipher key "+ symKeyBuff.toHex() +" iv " + ivBuff.toHex());
             let cipher = forge.cipher.createCipher('AES-CBC', this.state.symKey);
 
             console.log("start cipher");
@@ -90,9 +92,9 @@ class App extends React.Component {
             let resEncryptedData = forge.util.createBuffer(tmp);
             //let resEncryptedData = forge.util.createBuffer(tmp, "raw");
             //let resEncryptedData = forge.util.createBuffer(tmp, "utf8");
-            console.log("resEncryptedData " + JSON.stringify(resEncryptedData) + " len " + resEncryptedData.length());
+            console.log("resEncryptedData " + resEncryptedData.toHex() + " len " + resEncryptedData.length());
 
-            console.log("creating decipher key "+this.state.symKey + " iv " + iv);
+            console.log("creating decipher key "+ symKeyBuff.toHex() + " iv " + ivBuff.toHex());
             let decipher = forge.cipher.createDecipher('AES-CBC', this.state.symKey);
             console.log("start decipher");
             decipher.start({iv: iv});
