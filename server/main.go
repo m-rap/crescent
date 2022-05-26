@@ -181,10 +181,14 @@ func Api(c *gin.Context) {
 
 	fmt.Println("inside Api func")
 
+	//responseStr := "{\"data\": \"data rahasia balasan lho\"}\x00" // with null terminator
 	responseStr := "{\"data\": \"data rahasia balasan lho\"}"
 	responseStrLen := len(responseStr)
 	remain := aes.BlockSize - responseStrLen%aes.BlockSize
 	resDataLen := responseStrLen + remain
+
+	fmt.Printf("responseStrLen %d remain %d resDataLen %d\n", responseStrLen, remain, resDataLen)
+
 	resData := make([]byte, resDataLen)
 	resDataEncrypted := make([]byte, resDataLen)
 

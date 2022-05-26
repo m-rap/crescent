@@ -99,10 +99,13 @@ class App extends React.Component {
             console.log("start decipher");
             decipher.start({iv: iv});
             decipher.update(resEncryptedData);
-            let resDecryptedData = decipher.output.getBytes();
             let result = decipher.finish();
+            let resDecryptedData = decipher.output.bytes();
             console.log("decipher finished aaa "+result);
-            console.log("resDecryptedData "+resDecryptedData);
+            console.log("resDecryptedData " + typeof resDecryptedData + ", " + resDecryptedData + " " + decipher.output.toHex() + " len " +
+                decipher.output.length());
+            //let resDecryptedDataStr = String.fromCharCode(resDecryptedData);
+            //console.log("resDecryptedData string: " + resDecryptedDataStr);
             let resData = JSON.parse(resDecryptedData);
             console.log("res from server: " + resData);
         }
