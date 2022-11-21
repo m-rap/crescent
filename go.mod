@@ -1,4 +1,4 @@
-module encryptedrest
+module crescent
 
 go 1.18
 
