@@ -1,4 +1,4 @@
-package main
+package crescent
 
 import (
 	"crypto/aes"
@@ -42,10 +42,6 @@ var clientData map[string]interface{}
 var aesCipher cipher.Block
 var iv []byte
 var params EncNegoClientParams
-
-func Home(c *gin.Context) {
-	c.String(200, "hello")
-}
 
 func Negotiate(c *gin.Context) {
 	state := 0
@@ -180,10 +176,6 @@ func Negotiate(c *gin.Context) {
 	}
 }
 
-func func1(c *gin.Context) {
-	SendEncRestResponse("{\"data\": \"data rahasia balasan lho\"}", c)
-}
-
 func SendEncRestResponse(responseStr string, c *gin.Context) {
 	responseStrLen := len(responseStr)
 	remain := aes.BlockSize - responseStrLen%aes.BlockSize
@@ -256,16 +248,6 @@ func testSym() {
 	fmt.Printf("decrypted: %s (%d)\n", string(resDataDecrypted), len(resDataDecrypted))
 }
 
-func main() {
+func Init() {
 	clientInfoMap = make(map[string]ClientInfo)
-
-	route := gin.New()
-	apiGroup := route.Group("/api")
-	apiGroup.Use(Negotiate)
-	apiGroup.POST("/func1", func1)
-
-	route.Static("/app", "../client")
-	route.Run(":8080")
-
-	//testSym()
 }
