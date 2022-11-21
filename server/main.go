@@ -25,7 +25,7 @@ import (
 type EncNegoClientParams struct {
 	D1 string `json:"d1"`
 	D2 string `json:"d2"`
-	D3 string `json:"d3"`
+	D3 bool   `json:"d3"`
 	D4 string `json:"d4"`
 	D5 int    `json:"d5"`
 }
@@ -62,10 +62,10 @@ func Negotiate(c *gin.Context) {
 	} else {
 	}
 
-	fmt.Printf("params d5 %s\n", params.D5)
+	fmt.Printf("params d5 %v\n", params.D5)
 	if params.D5 >= 0 {
 		state = params.D5
-		fmt.Printf("request nego state %s %d\n", params.D5, state)
+		fmt.Printf("request nego state %v %d\n", params.D5, state)
 	}
 
 	fmt.Printf("nego state %d\n", state)
@@ -119,7 +119,16 @@ func Negotiate(c *gin.Context) {
 		clientInfoMap[id] = aClientInfo
 
 	case 1:
-		clientInfo = clientInfoMap[id]
+		var ok bool
+		clientInfo, ok = clientInfoMap[id]
+
+		if !ok {
+			c.JSON(200, gin.H{
+				"d3":  0,
+				"msg": "not negotiated yet",
+			})
+			return
+		}
 
 		fmt.Printf("state 1, d2: %v\n", params.D2)
 		fmt.Printf("client info %s, symkey %x\n", clientInfo.Uuid, clientInfo.SymKey)
@@ -132,6 +141,7 @@ func Negotiate(c *gin.Context) {
 		d2Arr := strings.Split(params.D2, "\\n")
 		if len(d2Arr) < 2 {
 			c.JSON(200, gin.H{
+				"d3":  0,
 				"msg": "invalid data",
 			})
 			c.Abort()
@@ -170,19 +180,11 @@ func Negotiate(c *gin.Context) {
 	}
 }
 
-func Api(c *gin.Context) {
-	//var tmp interface{}
-	//tmp, _ = c.Get("data")
-	//data := tmp.(map[string]interface{})
-	//tmp, _ = c.Get("cipher")
-	//aesCipher := tmp.(cipher.Block)
-	//tmp, _ = c.Get("iv")
-	//iv := tmp.([]byte)
+func func1(c *gin.Context) {
+	SendEncRestResponse("{\"data\": \"data rahasia balasan lho\"}", c)
+}
 
-	fmt.Println("inside Api func")
-
-	//responseStr := "{\"data\": \"data rahasia balasan lho\"}\x00" // with null terminator
-	responseStr := "{\"data\": \"data rahasia balasan lho\"}"
+func SendEncRestResponse(responseStr string, c *gin.Context) {
 	responseStrLen := len(responseStr)
 	remain := aes.BlockSize - responseStrLen%aes.BlockSize
 	resDataLen := responseStrLen + remain
@@ -256,15 +258,14 @@ func testSym() {
 
 func main() {
 	clientInfoMap = make(map[string]ClientInfo)
-	//encNegoGateway := gin.Default()
-	encNegoGateway := gin.New()
-	apiGroup := encNegoGateway.Group("/api")
-	apiGroup.Use(Negotiate)
-	apiGroup.POST("/", Api)
-	//apiGroup.POST("/", Negotiate)
 
-	encNegoGateway.Static("/app", "../client")
-	encNegoGateway.Run(":8080")
+	route := gin.New()
+	apiGroup := route.Group("/api")
+	apiGroup.Use(Negotiate)
+	apiGroup.POST("/func1", func1)
+
+	route.Static("/app", "../client")
+	route.Run(":8080")
 
 	//testSym()
 }
