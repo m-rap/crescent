@@ -1,4 +1,4 @@
-module crescent
+module github.com/m-rap/crescent
 
 go 1.18
 
