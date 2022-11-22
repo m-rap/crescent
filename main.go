@@ -51,7 +51,10 @@ func Negotiate(c *gin.Context) {
 
 	c.ShouldBindJSON(&params)
 
-	id, err := c.Cookie("uuid")
+	var id string = ""
+	var err error
+
+	id, err = c.Cookie("uuid")
 
 	if err != nil {
 		fmt.Printf("id not exists: %s:%T,%s:%T\n", id, id, err, err)
@@ -116,6 +119,13 @@ func Negotiate(c *gin.Context) {
 
 	case 1:
 		var ok bool
+
+		if id == "" {
+			fmt.Printf("can't process, id is empty\n")
+			c.Abort()
+			return
+		}
+
 		clientInfo, ok = clientInfoMap[id]
 
 		if !ok {
